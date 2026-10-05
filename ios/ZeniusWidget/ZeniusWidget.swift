@@ -5,14 +5,12 @@
 
 import WidgetKit
 import SwiftUI
-import AppIntents
 
-struct ConfigurationAppIntent: WidgetConfigurationIntent {
-    static var title: LocalizedStringResource { "Konfigurasi Widget" }
-    static var description: IntentDescription { "Widget Aktivitas Belajar Zenius" }
+private enum WidgetStore {
+    static let groupID = "group.com.zenius.app"
+    static let kind = "ZeniusWidget"
 
-    @Parameter(title: "Emoji Favorit", default: "📚")
-    var favoriteEmoji: String
+    static var defaults: UserDefaults? { UserDefaults(suiteName: groupID) }
 }
 
 struct SimpleEntry: TimelineEntry {
@@ -21,65 +19,178 @@ struct SimpleEntry: TimelineEntry {
     let activeSubject: String
     let dailyProgress: Double
     let minutesLearned: Int
+    let pokemonName: String
+    let pokemonImageData: Data?
 }
 
-struct Provider: AppIntentTimelineProvider {
+struct Provider: TimelineProvider {
     func placeholder(in context: Context) -> SimpleEntry {
-        SimpleEntry(date: Date(), streakDays: 7, activeSubject: "Matematika", dailyProgress: 0.75, minutesLearned: 45)
+        SimpleEntry(date: Date(), streakDays: 5, activeSubject: "Matematika",
+                    dailyProgress: 0.6, minutesLearned: 30,
+                    pokemonName: "pikachu", pokemonImageData: nil)
     }
 
-    func snapshot(for configuration: ConfigurationAppIntent, in context: Context) async -> SimpleEntry {
-        fetchCurrentEntry()
-    }
-    
-    func timeline(for configuration: ConfigurationAppIntent, in context: Context) async -> Timeline<SimpleEntry> {
-        let entry = fetchCurrentEntry()
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date())!
-        return Timeline(entries: [entry], policy: .after(nextUpdate))
+    func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> Void) {
+        // Return instantly for widget gallery and home screen drop animation
+        completion(fetchCachedEntry())
     }
 
-    private func fetchCurrentEntry() -> SimpleEntry {
-        let userDefaults = UserDefaults(suiteName: "group.com.zenius.app")
-        let streak = userDefaults?.integer(forKey: "streakDays") ?? 5
+    func getTimeline(in context: Context, completion: @escaping (Timeline<SimpleEntry>) -> Void) {
+        Task {
+            var entry = fetchCachedEntry()
+
+            // Poll a new random Pokemon from PokeAPI GraphQL
+            if let random = await ZeniusWidgetClient.fetchRandomPokemon(),
+               let data = await ZeniusWidgetClient.downloadImageData(from: random.imageURL) {
+                WidgetStore.defaults?.set(data, forKey: "pokemonImageData")
+                WidgetStore.defaults?.set(random.name, forKey: "pokemonImageName")
+                WidgetStore.defaults?.set(random.name, forKey: "pokemonAvatar")
+                WidgetStore.defaults?.synchronize()
+
+                entry = SimpleEntry(
+                    date: Date(),
+                    streakDays: entry.streakDays,
+                    activeSubject: entry.activeSubject,
+                    dailyProgress: entry.dailyProgress,
+                    minutesLearned: entry.minutesLearned,
+                    pokemonName: random.name,
+                    pokemonImageData: data
+                )
+            } else if entry.pokemonImageData == nil,
+                      let spriteURL = await ZeniusWidgetClient.fetchSpriteURL(name: entry.pokemonName),
+                      let data = await ZeniusWidgetClient.downloadImageData(from: spriteURL) {
+                WidgetStore.defaults?.set(data, forKey: "pokemonImageData")
+                WidgetStore.defaults?.set(entry.pokemonName, forKey: "pokemonImageName")
+                WidgetStore.defaults?.synchronize()
+
+                entry = SimpleEntry(
+                    date: Date(),
+                    streakDays: entry.streakDays,
+                    activeSubject: entry.activeSubject,
+                    dailyProgress: entry.dailyProgress,
+                    minutesLearned: entry.minutesLearned,
+                    pokemonName: entry.pokemonName,
+                    pokemonImageData: data
+                )
+            }
+
+            // Schedule the next update after 1 minute (60 seconds)
+            let nextUpdate = Date().addingTimeInterval(60)
+            let timeline = Timeline(entries: [entry], policy: .after(nextUpdate))
+            completion(timeline)
+        }
+    }
+
+    private func fetchCachedEntry() -> SimpleEntry {
+        let userDefaults = WidgetStore.defaults
+        let streak = (userDefaults?.object(forKey: "streakDays") as? Int) ?? 5
         let subject = userDefaults?.string(forKey: "activeSubject") ?? "Matematika"
-        let progress = userDefaults?.double(forKey: "dailyProgress") ?? 0.6
-        let minutes = userDefaults?.integer(forKey: "minutesLearned") ?? 30
-        
+        let progress = (userDefaults?.object(forKey: "dailyProgress") as? Double) ?? 0.6
+        let minutes = (userDefaults?.object(forKey: "minutesLearned") as? Int) ?? 30
+        let pokemonName = userDefaults?.string(forKey: "pokemonAvatar") ?? "pikachu"
+        let savedImageData = userDefaults?.string(forKey: "pokemonImageName") == pokemonName
+            ? userDefaults?.data(forKey: "pokemonImageData") : nil
+
         return SimpleEntry(
             date: Date(),
-            streakDays: streak > 0 ? streak : 5,
+            streakDays: max(0, streak),
             activeSubject: subject.isEmpty ? "Matematika" : subject,
-            dailyProgress: progress > 0 ? progress : 0.6,
-            minutesLearned: minutes > 0 ? minutes : 30
+            dailyProgress: progress.isFinite ? min(max(progress, 0), 1) : 0,
+            minutesLearned: max(0, minutes),
+            pokemonName: pokemonName,
+            pokemonImageData: savedImageData
         )
+    }
+
+}
+
+extension View {
+    @ViewBuilder
+    func widgetBackground(_ backgroundView: some View) -> some View {
+        if #available(iOS 17.0, *) {
+            containerBackground(for: .widget) {
+                backgroundView
+            }
+        } else {
+            background(backgroundView)
+        }
+    }
+}
+
+struct PokemonAvatarView: View {
+    let imageData: Data?
+    var size: CGFloat = 60
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color.purple.opacity(0.18))
+                .frame(width: size + 8, height: size + 8)
+                .shadow(color: Color.black.opacity(0.2), radius: 5, x: 0, y: 2)
+
+            if let data = imageData, let uiImage = UIImage(data: data) {
+                Image(uiImage: uiImage)
+                    .interpolation(.none)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: size, height: size)
+            } else {
+                Text("⚡️")
+                    .font(.system(size: size * 0.55))
+            }
+        }
     }
 }
 
 struct ZeniusWidgetEntryView : View {
     var entry: Provider.Entry
-    @Environment(\.widgetFamily) var family
+    @SwiftUI.Environment(\.widgetFamily) var family
 
-    var body: some View {
+    private var pokemonOverlaySize: CGFloat {
         switch family {
         case .systemSmall:
-            smallWidgetView
+            return 40
         case .systemMedium:
-            mediumWidgetView
+            return 52
         default:
-            largeWidgetView
+            return 72
+        }
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottomTrailing) {
+            // Layer 1 (Base Content)
+            Group {
+                switch family {
+                case .systemSmall:
+                    smallWidgetView
+                case .systemMedium:
+                    mediumWidgetView
+                default:
+                    largeWidgetView
+                }
+            }
+
+            // Layer 2 (Z-Index Top Overlay): Gambar Pokemon Besar di Pojok Kanan Bawah
+            PokemonAvatarView(imageData: entry.pokemonImageData, size: pokemonOverlaySize)
+                .padding(6)
+                .zIndex(999)
         }
     }
 
     // MARK: - Small Widget
     var smallWidgetView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "book.fill")
+                    .foregroundColor(.purple)
+                    .font(.caption)
                 Text("Zenius")
                     .font(.caption)
                     .fontWeight(.bold)
                     .foregroundColor(.purple)
                 Spacer()
-                Text("🔥 \(entry.streakDays) Hari")
+                Text("🔥 \(entry.streakDays)d")
                     .font(.caption2)
                     .fontWeight(.semibold)
                     .foregroundColor(.orange)
@@ -91,32 +202,34 @@ struct ZeniusWidgetEntryView : View {
                 .font(.subheadline)
                 .fontWeight(.bold)
                 .lineLimit(1)
+                .padding(.trailing, 28)
 
             ProgressView(value: entry.dailyProgress)
                 .tint(.purple)
+                .padding(.trailing, 28)
 
             Text("\(Int(entry.dailyProgress * 100))% Selesai")
                 .font(.caption2)
                 .foregroundColor(.secondary)
         }
         .padding()
-        .containerBackground(for: .widget) {
-            Color(UIColor.systemBackground)
-        }
+        .widgetBackground(Color(UIColor.systemBackground))
     }
 
     // MARK: - Medium Widget
     var mediumWidgetView: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Circle()
-                        .fill(Color.purple)
-                        .frame(width: 8, height: 8)
-                    Text("ZENIUS LEARN")
-                        .font(.caption2)
-                        .fontWeight(.bold)
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
                         .foregroundColor(.purple)
+                        .font(.caption)
+                    Text("ZENIUS LEARN")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.purple)
+                    Text("• \(entry.pokemonName.capitalized)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(.secondary)
                 }
 
                 Text(entry.activeSubject)
@@ -131,61 +244,61 @@ struct ZeniusWidgetEntryView : View {
 
                 ProgressView(value: entry.dailyProgress)
                     .tint(.purple)
+                    .padding(.trailing, 45)
             }
 
             Divider()
 
-            VStack(spacing: 12) {
-                VStack(spacing: 2) {
+            VStack(alignment: .trailing, spacing: 6) {
+                HStack(spacing: 4) {
                     Text("🔥 \(entry.streakDays)")
-                        .font(.title2)
+                        .font(.headline)
                         .fontWeight(.bold)
                         .foregroundColor(.orange)
-                    Text("Streak")
+                    Text("Hari")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
 
-                VStack(spacing: 2) {
+                HStack(spacing: 4) {
                     Text("⏱️ \(entry.minutesLearned)m")
-                        .font(.headline)
+                        .font(.subheadline)
                         .fontWeight(.bold)
                         .foregroundColor(.blue)
-                    Text("Belajar")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
                 }
+
+                Spacer()
             }
-            .frame(width: 80)
+            .frame(width: 75, alignment: .topTrailing)
         }
         .padding()
-        .containerBackground(for: .widget) {
-            Color(UIColor.systemBackground)
-        }
+        .widgetBackground(Color(UIColor.systemBackground))
     }
 
     // MARK: - Large Widget
     var largeWidgetView: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                VStack(alignment: .leading) {
+            HStack(spacing: 10) {
+                Image(systemName: "graduationcap.fill")
+                    .foregroundColor(.purple)
+                VStack(alignment: .leading, spacing: 2) {
                     Text("Zenius Education")
-                        .font(.caption)
+                        .font(.caption2)
                         .fontWeight(.bold)
                         .foregroundColor(.purple)
                     Text("Ringkasan Belajar")
-                        .font(.title2)
+                        .font(.headline)
                         .fontWeight(.bold)
                 }
                 Spacer()
-                Text("🔥 \(entry.streakDays) Hari Streak")
-                    .font(.caption)
+                Text("🔥 \(entry.streakDays) Hari")
+                    .font(.caption2)
                     .fontWeight(.bold)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
                     .background(Color.orange.opacity(0.15))
                     .foregroundColor(.orange)
-                    .cornerRadius(12)
+                    .cornerRadius(10)
             }
 
             Divider()
@@ -224,9 +337,7 @@ struct ZeniusWidgetEntryView : View {
             }
         }
         .padding()
-        .containerBackground(for: .widget) {
-            Color(UIColor.systemBackground)
-        }
+        .widgetBackground(Color(UIColor.systemBackground))
     }
 }
 
@@ -255,10 +366,10 @@ struct WidgetStatCard: View {
 }
 
 struct ZeniusWidget: Widget {
-    let kind: String = "ZeniusWidget"
+    let kind: String = WidgetStore.kind
 
     var body: some WidgetConfiguration {
-        AppIntentConfiguration(kind: kind, intent: ConfigurationAppIntent.self, provider: Provider()) { entry in
+        StaticConfiguration(kind: kind, provider: Provider()) { entry in
             ZeniusWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Zenius Widget")

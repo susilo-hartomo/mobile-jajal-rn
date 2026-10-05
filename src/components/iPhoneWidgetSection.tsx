@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,9 +6,16 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { updateZeniusWidget, ZeniusWidgetData } from '../native/WidgetModule';
+import {
+  updateZeniusWidget,
+  ZeniusWidgetData,
+  startPokemonPolling,
+  stopPokemonPolling,
+  rotateRandomPokemon,
+} from '../native/WidgetModule';
 
 export default function IPhoneWidgetSection() {
   const [streakDays, setStreakDays] = useState<number>(15);
@@ -20,6 +27,50 @@ export default function IPhoneWidgetSection() {
   const [activeTab, setActiveTab] = useState<'Small' | 'Medium' | 'Large'>(
     'Medium'
   );
+  const [selectedPokemon, setSelectedPokemon] = useState<string>('pikachu');
+  const [isPolling, setIsPolling] = useState<boolean>(true);
+  const [isRotating, setIsRotating] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (isPolling) {
+      startPokemonPolling(60);
+    } else {
+      stopPokemonPolling();
+    }
+    return () => {
+      stopPokemonPolling();
+    };
+  }, [isPolling]);
+
+  const handleTogglePolling = async () => {
+    const nextState = !isPolling;
+    setIsPolling(nextState);
+    if (nextState) {
+      await startPokemonPolling(60);
+      Alert.alert(
+        'Polling 1 Menit Aktif',
+        'Pokemon di Zenius Widget akan otomatis berganti ke Pokemon acak tiap 60 detik di background.'
+      );
+    } else {
+      await stopPokemonPolling();
+      Alert.alert('Polling Dihentikan', 'Auto-rotate Pokemon 1 menit telah dinonaktifkan.');
+    }
+  };
+
+  const handleRotateNow = async () => {
+    setIsRotating(true);
+    const newName = await rotateRandomPokemon();
+    setIsRotating(false);
+    if (newName) {
+      setSelectedPokemon(newName.toLowerCase());
+      Alert.alert(
+        'Pokemon Berganti!',
+        `Widget berhasil diperbarui dengan Pokemon acak: ${newName.toUpperCase()} dari GraphQL PokeAPI.`
+      );
+    } else {
+      Alert.alert('Gagal Acak', 'Tidak dapat mengambil Pokemon acak saat ini.');
+    }
+  };
 
   const handleSyncToWidget = async () => {
     const data: ZeniusWidgetData = {
@@ -28,13 +79,14 @@ export default function IPhoneWidgetSection() {
       progressPercent,
       nextClassTime,
       quote: 'Pahami Konsep, Kuasai Nalar.',
+      pokemonAvatar: selectedPokemon,
     };
 
     const success = await updateZeniusWidget(data);
     if (success) {
       Alert.alert(
         'Widget iOS Diperbarui',
-        'Data widget iPhone milikmu telah berhasil diperbarui ke WidgetKit!'
+        `Data widget iPhone milikmu (${selectedPokemon.toUpperCase()}) telah berhasil diperbarui ke WidgetKit!`
       );
     } else {
       Alert.alert(
@@ -86,13 +138,136 @@ export default function IPhoneWidgetSection() {
         ))}
       </View>
 
+      {/* Pokemon Companion Selector */}
+      <View style={{ marginBottom: 14 }}>
+        <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 8 }}>
+          🎮 Pokemon Companion (Avatar Widget GraphQL):
+        </Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+          {[
+            { id: 'pikachu', name: 'Pikachu', emoji: '⚡️' },
+            { id: 'bulbasaur', name: 'Bulbasaur', emoji: '🍃' },
+            { id: 'charmander', name: 'Charmander', emoji: '🔥' },
+            { id: 'squirtle', name: 'Squirtle', emoji: '💧' },
+            { id: 'ditto', name: 'Ditto', emoji: '🟣' },
+            { id: 'snorlax', name: 'Snorlax', emoji: '💤' },
+          ].map((poke) => (
+            <TouchableOpacity
+              key={poke.id}
+              activeOpacity={0.8}
+              onPress={() => setSelectedPokemon(poke.id)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 5,
+                paddingVertical: 6,
+                paddingHorizontal: 10,
+                borderRadius: 16,
+                backgroundColor: selectedPokemon === poke.id ? '#4F46E5' : '#F8FAFC',
+                borderWidth: 1.5,
+                borderColor: selectedPokemon === poke.id ? '#4338CA' : '#E2E8F0',
+              }}
+            >
+              <Text style={{ fontSize: 13 }}>{poke.emoji}</Text>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: '700',
+                  color: selectedPokemon === poke.id ? '#FFFFFF' : '#475569',
+                }}
+              >
+                {poke.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* 1-Minute Polling Controller Card */}
+      <View
+        style={{
+          backgroundColor: isPolling ? '#F0FDF4' : '#F8FAFC',
+          borderRadius: 14,
+          padding: 12,
+          borderWidth: 1,
+          borderColor: isPolling ? '#86EFAC' : '#E2E8F0',
+          marginBottom: 14,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons
+              name={isPolling ? 'sync-circle' : 'pause-circle'}
+              size={20}
+              color={isPolling ? '#16A34A' : '#64748B'}
+            />
+            <Text style={{ fontSize: 13, fontWeight: '800', color: isPolling ? '#15803D' : '#334155' }}>
+              Polling 1 Menit (Background)
+            </Text>
+          </View>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={handleTogglePolling}
+            style={{
+              backgroundColor: isPolling ? '#16A34A' : '#64748B',
+              paddingVertical: 4,
+              paddingHorizontal: 10,
+              borderRadius: 12,
+            }}
+          >
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#FFFFFF' }}>
+              {isPolling ? 'Aktif' : 'Mati'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={{ fontSize: 11.5, color: '#64748B', lineHeight: 16, marginBottom: 8 }}>
+          {isPolling
+            ? 'Widget akan merotasi random image Pokemon baru dari PokeAPI GraphQL tiap 1 menit di background.'
+            : 'Polling dinonaktifkan. Widget akan menampilkan Pokemon yang Anda pilih secara statis.'}
+        </Text>
+
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={handleRotateNow}
+          disabled={isRotating}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            backgroundColor: '#4F46E5',
+            paddingVertical: 8,
+            borderRadius: 10,
+          }}
+        >
+          {isRotating ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <>
+              <Ionicons name="dice-outline" size={16} color="#FFFFFF" />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#FFFFFF' }}>
+                Acak Pokemon Sekarang (Test Manual)
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+
       {/* Live Preview Container */}
       <View style={styles.previewContainer}>
         {activeTab === 'Small' && (
           <View style={styles.smallWidgetPreview}>
             <View style={styles.previewHeader}>
-              <Text style={styles.logoText}>ZENIUS</Text>
-              <Ionicons name="flame" size={16} color="#EA580C" />
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={{ fontSize: 14 }}>
+                  {selectedPokemon === 'pikachu' ? '⚡️' : selectedPokemon === 'bulbasaur' ? '🍃' : selectedPokemon === 'charmander' ? '🔥' : selectedPokemon === 'squirtle' ? '💧' : selectedPokemon === 'ditto' ? '🟣' : '💤'}
+                </Text>
+                <Text style={styles.logoText}>ZENIUS</Text>
+              </View>
+              <Text style={{ fontSize: 10, color: '#6366F1', fontWeight: '700' }}>
+                {selectedPokemon.toUpperCase()}
+              </Text>
             </View>
             <Text style={styles.streakNumber}>{streakDays} Hari</Text>
             <Text style={styles.streakSub}>Streak Belajar 🔥</Text>
@@ -105,7 +280,12 @@ export default function IPhoneWidgetSection() {
         {activeTab === 'Medium' && (
           <View style={styles.mediumWidgetPreview}>
             <View style={styles.mediumLeftColumn}>
-              <Text style={styles.subTag}>ZENIUS • TARGET HARI INI</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={{ fontSize: 12 }}>
+                  {selectedPokemon === 'pikachu' ? '⚡️' : selectedPokemon === 'bulbasaur' ? '🍃' : selectedPokemon === 'charmander' ? '🔥' : selectedPokemon === 'squirtle' ? '💧' : selectedPokemon === 'ditto' ? '🟣' : '💤'}
+                </Text>
+                <Text style={styles.subTag}>ZENIUS LEARN • {selectedPokemon.toUpperCase()}</Text>
+              </View>
               <Text style={styles.streakNumber}>{streakDays} Hari 🔥</Text>
               <Text style={styles.progressText}>
                 Target: {progressPercent}% Selesai
@@ -141,7 +321,12 @@ export default function IPhoneWidgetSection() {
           <View style={styles.largeWidgetPreview}>
             <View style={styles.largeHeader}>
               <View>
-                <Text style={styles.logoText}>ZENIUS EDUCATION</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <Text style={{ fontSize: 14 }}>
+                    {selectedPokemon === 'pikachu' ? '⚡️' : selectedPokemon === 'bulbasaur' ? '🍃' : selectedPokemon === 'charmander' ? '🔥' : selectedPokemon === 'squirtle' ? '💧' : selectedPokemon === 'ditto' ? '🟣' : '💤'}
+                  </Text>
+                  <Text style={styles.logoText}>ZENIUS EDUCATION • {selectedPokemon.toUpperCase()}</Text>
+                </View>
                 <Text style={styles.largeTitle}>Dashboard Belajar Nalar</Text>
               </View>
               <Ionicons name="flame" size={26} color="#EA580C" />
