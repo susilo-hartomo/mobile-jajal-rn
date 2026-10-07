@@ -2,13 +2,12 @@
 //  ZeniusWidgetLiveActivity.swift
 //  ZeniusWidget
 //
-//  Created by susilo hartomo on 01/10/26.
-//
 
 import ActivityKit
 import WidgetKit
 import SwiftUI
 
+@available(iOS 16.1, *)
 struct ZeniusWidgetAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
         // Dynamic stateful properties about your activity go here!
@@ -19,6 +18,7 @@ struct ZeniusWidgetAttributes: ActivityAttributes {
     var name: String
 }
 
+@available(iOS 16.1, *)
 struct ZeniusWidgetLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: ZeniusWidgetAttributes.self) { context in
@@ -56,12 +56,14 @@ struct ZeniusWidgetLiveActivity: Widget {
     }
 }
 
+@available(iOS 16.1, *)
 extension ZeniusWidgetAttributes {
     fileprivate static var preview: ZeniusWidgetAttributes {
         ZeniusWidgetAttributes(name: "World")
     }
 }
 
+@available(iOS 16.1, *)
 extension ZeniusWidgetAttributes.ContentState {
     fileprivate static var smiley: ZeniusWidgetAttributes.ContentState {
         ZeniusWidgetAttributes.ContentState(emoji: "😀")
@@ -70,11 +72,4 @@ extension ZeniusWidgetAttributes.ContentState {
      fileprivate static var starEyes: ZeniusWidgetAttributes.ContentState {
          ZeniusWidgetAttributes.ContentState(emoji: "🤩")
      }
-}
-
-#Preview("Notification", as: .content, using: ZeniusWidgetAttributes.preview) {
-   ZeniusWidgetLiveActivity()
-} contentStates: {
-    ZeniusWidgetAttributes.ContentState.smiley
-    ZeniusWidgetAttributes.ContentState.starEyes
 }

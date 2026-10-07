@@ -2,12 +2,11 @@
 //  AppIntent.swift
 //  ZeniusWidget
 //
-//  Created by susilo hartomo on 01/10/26.
-//
 
 import WidgetKit
 import AppIntents
 
+@available(iOS 17.0, *)
 struct ConfigurationAppIntent: WidgetConfigurationIntent {
     static var title: LocalizedStringResource { "Configuration" }
     static var description: IntentDescription { "This is an example widget." }

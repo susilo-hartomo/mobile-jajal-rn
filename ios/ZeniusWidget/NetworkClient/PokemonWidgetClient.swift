@@ -1,7 +1,7 @@
 import WidgetKit
 import UIKit
 
-struct ZeniusWidgetClient {
+struct PokemonWidgetClient {
   struct PokemonDetailResponse: Decodable {
     let data: Payload?
 
@@ -47,11 +47,10 @@ struct ZeniusWidgetClient {
       else {
         return nil
       }
-      print("pokemon data \(pokemon)")
 
       return (name: pokemon.name, imageURL: imageURL)
     } catch {
-      print("[ZeniusWidgetClient] fetchRandomPokemon failed:", error)
+      print("[PokemonWidgetClient] fetchRandomPokemon failed:", error)
       return nil
     }
   }
@@ -73,7 +72,7 @@ struct ZeniusWidgetClient {
 
       return url
     } catch {
-      print("[ZeniusWidgetClient] fetchSpriteURL failed:", error)
+      print("[PokemonWidgetClient] fetchSpriteURL failed:", error)
       return nil
     }
   }
@@ -92,7 +91,7 @@ struct ZeniusWidgetClient {
       }
       return data
     } catch {
-      print("[ZeniusWidgetClient] downloadImageData failed:", error)
+      print("[PokemonWidgetClient] downloadImageData failed:", error)
       return nil
     }
   }

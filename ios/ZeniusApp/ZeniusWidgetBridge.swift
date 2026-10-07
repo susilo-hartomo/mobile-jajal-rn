@@ -52,7 +52,7 @@ class ZeniusWidgetBridge: NSObject {
     defaults.synchronize()
 
     if #available(iOS 14.0, *) {
-      WidgetCenter.shared.reloadTimelines(ofKind: "ZeniusWidget")
+      WidgetCenter.shared.reloadAllTimelines()
     }
 
     if let pokemonName = pokemonToFetch {
@@ -78,7 +78,7 @@ class ZeniusWidgetBridge: NSObject {
           defaults.set(name, forKey: "pokemonImageName")
           defaults.synchronize()
           if #available(iOS 14.0, *) {
-            WidgetCenter.shared.reloadTimelines(ofKind: "ZeniusWidget")
+            WidgetCenter.shared.reloadAllTimelines()
           }
         }
       } catch {
@@ -100,7 +100,7 @@ class ZeniusWidgetBridge: NSObject {
     reject: @escaping RCTPromiseRejectBlock
   ) {
     if #available(iOS 14.0, *) {
-      WidgetCenter.shared.reloadTimelines(ofKind: "ZeniusWidget")
+      WidgetCenter.shared.reloadAllTimelines()
     }
     resolve(true)
   }
@@ -190,7 +190,7 @@ class ZeniusWidgetBridge: NSObject {
         defaults.synchronize()
 
         if #available(iOS 14.0, *) {
-          WidgetCenter.shared.reloadTimelines(ofKind: "ZeniusWidget")
+          WidgetCenter.shared.reloadAllTimelines()
         }
         return randomPoke.name
       }

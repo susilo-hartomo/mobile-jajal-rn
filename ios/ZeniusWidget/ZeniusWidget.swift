@@ -40,8 +40,8 @@ struct Provider: TimelineProvider {
             var entry = fetchCachedEntry()
 
             // Poll a new random Pokemon from PokeAPI GraphQL
-            if let random = await ZeniusWidgetClient.fetchRandomPokemon(),
-               let data = await ZeniusWidgetClient.downloadImageData(from: random.imageURL) {
+            if let random = await PokemonWidgetClient.fetchRandomPokemon(),
+               let data = await PokemonWidgetClient.downloadImageData(from: random.imageURL) {
                 WidgetStore.defaults?.set(data, forKey: "pokemonImageData")
                 WidgetStore.defaults?.set(random.name, forKey: "pokemonImageName")
                 WidgetStore.defaults?.set(random.name, forKey: "pokemonAvatar")
@@ -57,8 +57,8 @@ struct Provider: TimelineProvider {
                     pokemonImageData: data
                 )
             } else if entry.pokemonImageData == nil,
-                      let spriteURL = await ZeniusWidgetClient.fetchSpriteURL(name: entry.pokemonName),
-                      let data = await ZeniusWidgetClient.downloadImageData(from: spriteURL) {
+                      let spriteURL = await PokemonWidgetClient.fetchSpriteURL(name: entry.pokemonName),
+                      let data = await PokemonWidgetClient.downloadImageData(from: spriteURL) {
                 WidgetStore.defaults?.set(data, forKey: "pokemonImageData")
                 WidgetStore.defaults?.set(entry.pokemonName, forKey: "pokemonImageName")
                 WidgetStore.defaults?.synchronize()
@@ -378,9 +378,3 @@ struct ZeniusWidget: Widget {
     }
 }
 
-@main
-struct ZeniusWidgetBundle: WidgetBundle {
-    var body: some Widget {
-        ZeniusWidget()
-    }
-}

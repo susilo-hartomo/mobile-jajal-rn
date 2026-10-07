@@ -2,13 +2,12 @@
 //  ZeniusWidgetControl.swift
 //  ZeniusWidget
 //
-//  Created by susilo hartomo on 01/10/26.
-//
 
 import AppIntents
 import SwiftUI
 import WidgetKit
 
+@available(iOS 18.0, *)
 struct ZeniusWidgetControl: ControlWidget {
     static let kind: String = "org.reactjs.native.example.ZeniusApp.ZeniusWidget"
 
@@ -30,6 +29,7 @@ struct ZeniusWidgetControl: ControlWidget {
     }
 }
 
+@available(iOS 18.0, *)
 extension ZeniusWidgetControl {
     struct Value {
         var isRunning: Bool
@@ -48,6 +48,7 @@ extension ZeniusWidgetControl {
     }
 }
 
+@available(iOS 18.0, *)
 struct TimerConfiguration: ControlConfigurationIntent {
     static let title: LocalizedStringResource = "Timer Name Configuration"
 
@@ -55,6 +56,7 @@ struct TimerConfiguration: ControlConfigurationIntent {
     var timerName: String
 }
 
+@available(iOS 18.0, *)
 struct StartTimerIntent: SetValueIntent {
     static let title: LocalizedStringResource = "Start a timer"
 
